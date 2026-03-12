@@ -1,0 +1,26 @@
+{
+  "name": "@floatfu-true/anyfork-cli",
+  "version": "0.1.4",
+  "type": "module",
+  "private": false,
+  "description": "AnyFork CLI for cross-agent session export, bridge, and fork workflows.",
+  "license": "MIT",
+  "bin": {
+    "anyfork": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@floatfu-true/anyfork-core": "0.1.4"
+  },
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

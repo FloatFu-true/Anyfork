@@ -1,0 +1,14 @@
+<svg width="1116" height="304" viewBox="0 0 1116 304" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1116" height="304" fill="#050505"/>
+  <text x="8" y="40" fill="#B6B8FF" font-family="'Cascadia Mono', Consolas, monospace" font-size="24" font-weight="700">Resume Session</text>
+  <text x="302" y="40" fill="#8B8B8B" font-family="'Cascadia Mono', Consolas, monospace" font-size="24" font-weight="700">(9 of 20)</text>
+  <rect x="16" y="62" width="1084" height="56" rx="8" stroke="#666666" stroke-width="2"/>
+  <circle cx="49" cy="90" r="8" stroke="#8D8D8D" stroke-width="2"/>
+  <line x1="55" y1="96" x2="62" y2="103" stroke="#8D8D8D" stroke-width="2"/>
+  <text x="66" y="100" fill="#9A9A9A" font-family="'Cascadia Mono', Consolas, monospace" font-size="24">Search…</text>
+  <text x="10" y="188" fill="#B9B9FF" font-family="'Cascadia Mono', Consolas, monospace" font-size="22">↑</text>
+  <text x="36" y="178" fill="#D8D8D8" font-family="'Cascadia Mono', Consolas, monospace" font-size="20">[CLAUDE-&gt;GEMINI][USER] Hello claude. I will migrate this session to gemini.</text>
+  <text x="36" y="210" fill="#9B9B9B" font-family="'Cascadia Mono', Consolas, monospace" font-size="20">4 hours ago • HEAD • 1.2KB</text>
+  <text x="36" y="265" fill="#D8D8D8" font-family="'Cascadia Mono', Consolas, monospace" font-size="20">[CLAUDE-&gt;CODEX][USER] Hello claude. I will migrate this session to codex.</text>
+  <text x="36" y="295" fill="#9B9B9B" font-family="'Cascadia Mono', Consolas, monospace" font-size="20">4 hours ago • HEAD • 1.2KB</text>
+</svg>

@@ -1,0 +1,21 @@
+{
+  "name": "@floatfu-true/anyfork-core",
+  "version": "0.1.4",
+  "type": "module",
+  "private": false,
+  "description": "Shared AnyFork core for local session parsing, export bundles, and cross-agent bridge flows.",
+  "license": "MIT",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

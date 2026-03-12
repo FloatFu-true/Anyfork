@@ -1,0 +1,12 @@
+node_modules/
+.anyfork/
+*.tgz
+*.log
+coverage/
+package/
+.smoke-*/
+latest
+.env
+.env.*
+.npmrc
+.DS_Store

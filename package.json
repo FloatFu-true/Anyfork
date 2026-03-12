@@ -1,0 +1,20 @@
+{
+  "name": "anyfork-workspace",
+  "version": "0.1.4",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "description": "AnyFork workspace for cross-agent session bridge CLI.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "start": "node packages/cli/src/index.js help",
+    "pack:core": "npm pack --dry-run -w @floatfu-true/anyfork-core",
+    "pack:cli": "npm pack --dry-run -w @floatfu-true/anyfork-cli"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
