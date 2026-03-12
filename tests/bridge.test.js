@@ -10,6 +10,7 @@ import {
   agentBridgeForkCommand,
   agentForkCommand,
   agentSessionsCommand,
+  buildCliSpawnInvocation,
   codexForkCommand,
   codexSessionsCommand
 } from "../packages/core/src/index.js";
@@ -701,6 +702,30 @@ test("cli rejects hidden commands that are no longer part of the public surface"
     () => runCli(["node", "anyfork", "platforms"]),
     /Unknown command: platforms/
   );
+});
+
+test("windows cli spawning uses shell mode for npm shim commands", async () => {
+  const originalPlatform = process.platform;
+
+  Object.defineProperty(process, "platform", {
+    value: "win32"
+  });
+
+  try {
+    const invocation = buildCliSpawnInvocation("gemini", ["--resume", "latest"], {
+      cwd: "C:\\Users\\Tester"
+    });
+
+    assert.equal(invocation.command, "gemini");
+    assert.deepEqual(invocation.args, ["--resume", "latest"]);
+    assert.equal(invocation.options.cwd, "C:\\Users\\Tester");
+    assert.equal(invocation.options.stdio, "inherit");
+    assert.equal(invocation.options.shell, true);
+  } finally {
+    Object.defineProperty(process, "platform", {
+      value: originalPlatform
+    });
+  }
 });
 
 test("agent bridge export can write a portable bundle and handoff", async (t) => {

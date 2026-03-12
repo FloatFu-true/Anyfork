@@ -1534,14 +1534,34 @@ function buildGeminiResumeArgs(options = {}, resumeHint = "latest") {
   return args;
 }
 
-async function spawnCliCommand(command, args, { cwd } = {}) {
-  const binary = process.platform === "win32" ? `${command}.cmd` : command;
+export function buildCliSpawnInvocation(command, args, { cwd } = {}) {
+  if (process.platform === "win32") {
+    return {
+      command,
+      args,
+      options: {
+        cwd,
+        stdio: "inherit",
+        shell: true
+      }
+    };
+  }
 
-  return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, {
+  return {
+    command,
+    args,
+    options: {
       cwd,
       stdio: "inherit"
-    });
+    }
+  };
+}
+
+async function spawnCliCommand(command, args, { cwd } = {}) {
+  const invocation = buildCliSpawnInvocation(command, args, { cwd });
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(invocation.command, invocation.args, invocation.options);
 
     child.on("error", reject);
     child.on("exit", (code) => resolve(code ?? 0));
