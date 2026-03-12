@@ -1,0 +1,21 @@
+<svg width="900" height="520" viewBox="0 0 900 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="anyforkGradient" x1="132" y1="120" x2="743" y2="405" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2F61B6"/>
+      <stop offset="0.55" stop-color="#53BCD1"/>
+      <stop offset="1" stop-color="#A8E3B2"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="520" rx="32" fill="#F7F8FB"/>
+  <path d="M172 169C172 155.745 182.745 145 196 145H247.052C252.356 145 257.421 142.79 261.056 138.896L305.944 90.8038C309.579 86.9102 314.644 84.7 319.948 84.7H420" stroke="url(#anyforkGradient)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M172 168H403" stroke="url(#anyforkGradient)" stroke-width="34" stroke-linecap="round"/>
+  <path d="M728 169C728 155.745 717.255 145 704 145H652.948C647.644 145 642.579 142.79 638.944 138.896L594.056 90.8038C590.421 86.9102 585.356 84.7 580.052 84.7H480" stroke="url(#anyforkGradient)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M497 168H728" stroke="url(#anyforkGradient)" stroke-width="34" stroke-linecap="round"/>
+  <path d="M172 237H403" stroke="url(#anyforkGradient)" stroke-width="34" stroke-linecap="round"/>
+  <path d="M172 237C172 250.255 182.745 261 196 261H247.052C252.356 261 257.421 263.21 261.056 267.104L305.944 315.196C309.579 319.09 314.644 321.3 319.948 321.3H420" stroke="url(#anyforkGradient)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M497 237H728" stroke="url(#anyforkGradient)" stroke-width="34" stroke-linecap="round"/>
+  <path d="M728 237C728 250.255 717.255 261 704 261H652.948C647.644 261 642.579 263.21 638.944 267.104L594.056 315.196C590.421 319.09 585.356 321.3 580.052 321.3H480" stroke="url(#anyforkGradient)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="450" cy="121" r="20" fill="url(#anyforkGradient)"/>
+  <circle cx="450" cy="203" r="20" fill="url(#anyforkGradient)"/>
+  <text x="148" y="445" fill="url(#anyforkGradient)" font-family="'Segoe UI', Arial, sans-serif" font-size="108" font-weight="500">AnyFork</text>
+</svg>
