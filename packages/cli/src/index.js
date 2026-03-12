@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { agentBridgeForkCommand } from "@floatfu-true/anyfork-core";
 
-const CLI_VERSION = "0.1.4";
+const CLI_VERSION = "0.1.5";
 
 const COMMAND_ALIASES = {
   "bridge-fork": "fork",
