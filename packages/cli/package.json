@@ -1,6 +1,6 @@
 {
   "name": "@floatfu-true/anyfork-cli",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "module",
   "private": false,
   "description": "AnyFork CLI for cross-agent session export, bridge, and fork workflows.",
@@ -12,7 +12,7 @@
     "start": "node src/index.js"
   },
   "dependencies": {
-    "@floatfu-true/anyfork-core": "0.1.5"
+    "@floatfu-true/anyfork-core": "0.1.6"
   },
   "files": [
     "src"

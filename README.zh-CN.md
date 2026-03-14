@@ -10,8 +10,6 @@
   <p align="center">
     在 Codex、Claude、Gemini 之间 fork 本地 session，并尽量保留目标端原生 resume 体验。
     <br />
-    简体中文
-    ·
     <a href="./README.md">English</a>
     ·
     <a href="https://github.com/FloatFu-true/Anyfork/issues">反馈问题</a>
@@ -21,75 +19,73 @@
 
   <p align="center">
     <a href="https://www.npmjs.com/package/@floatfu-true/anyfork-cli"><img src="https://img.shields.io/npm/v/@floatfu-true/anyfork-cli?style=for-the-badge" alt="NPM Version"></a>
+    <a href="https://www.npmjs.com/package/@floatfu-true/anyfork-mcp-server"><img src="https://img.shields.io/npm/v/@floatfu-true/anyfork-mcp-server?style=for-the-badge" alt="MCP Version"></a>
     <a href="https://github.com/FloatFu-true/Anyfork/blob/main/LICENSE"><img src="https://img.shields.io/github/license/FloatFu-true/Anyfork?style=for-the-badge" alt="MIT License"></a>
     <a href="https://github.com/FloatFu-true/Anyfork/issues"><img src="https://img.shields.io/github/issues/FloatFu-true/Anyfork?style=for-the-badge" alt="Issues"></a>
-    <a href="https://www.npmjs.com/package/@floatfu-true/anyfork-cli"><img src="https://img.shields.io/node/v/@floatfu-true/anyfork-cli?style=for-the-badge" alt="Node 22+"></a>
   </p>
 </div>
 
 ## 目录
 
-- [关于项目](#关于项目)
-- [技术栈](#技术栈)
+- [项目简介](#项目简介)
+- [0.1.6 更新重点](#016-更新重点)
+- [包结构](#包结构)
 - [快速开始](#快速开始)
-- [使用方式](#使用方式)
+- [CLI 用法](#cli-用法)
+- [MCP 用法](#mcp-用法)
 - [演示](#演示)
+- [本地开发](#本地开发)
 - [路线图](#路线图)
 - [参与贡献](#参与贡献)
 - [许可证](#许可证)
-- [联系](#联系)
-- [鸣谢](#鸣谢)
 
-## 关于项目
+## 项目简介
 
-AnyFork 是一个开源 CLI，只专注做一件事：
+AnyFork 是一个只聚焦一件事的开源工具集：
 
-把一个 AI 编程 CLI 里的真实本地对话迁移到另一个 AI 编程 CLI，保留可见 transcript，并在目标端格式已知时写入可原生 resume 的本地 session 数据。
+把一个 AI 编程 CLI 里的真实本地会话迁移到另一个 AI 编程 CLI，保留可见 transcript，并在目标端格式已知时写入可原生 resume 的本地 session 数据。
 
-这个项目存在的原因很直接。原生 fork 往往只能停留在单一产品内部，但真实工程流程经常是：
+AnyFork 的边界很明确：
 
-1. 先在一个 agent 里积累了大量上下文
-2. 发现下一步更适合交给另一个 agent
-3. 又不想手工重写整段对话上下文
+- 保留可见 transcript 的顺序
+- 在 `.anyfork/` 下产出可检查的 bridge artifacts
+- 在支持的平台上写入目标端原生 resume 数据
+- 对外接口尽量小，减少不可控兼容面
 
-AnyFork 关注的是可实际落地的连续性：
-
-- 按顺序保留可见 transcript
-- 在 `.anyfork/` 下生成可检查的 bridge artifacts
-- 在支持的平台上写入目标端原生本地会话数据
-- 对外公开命令面刻意保持极小
-
-AnyFork 不试图成为：
+AnyFork 不打算做这些事情：
 
 - 云端同步平台
-- 后端记忆服务
-- 厂商私有隐藏缓存的逐字节克隆器
-- 各家原生 CLI 的替代品
+- 托管式 memory 服务
+- 厂商私有隐藏缓存的逐字节克隆
+- Codex、Claude、Gemini 原生 CLI 的替代品
 
-它追求的是工程工作流里真正可用的跨工具连续性。
+## 0.1.6 更新重点
 
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
+- 新增 `@floatfu-true/anyfork-mcp-server`，模型现在可以直接通过 MCP 查找相关本地 session，并导入到当前项目。
+- 新增 4 个 MCP 工具：
+  `anyfork_list_sessions`、`anyfork_find_relevant_sessions`、`anyfork_import_session`、`anyfork_find_and_import`。
+- `--dry-run` 不再写入目标平台原生 session，避免误污染目标端数据。
+- 为超长 transcript 增加预算与截断逻辑，避免 `Invalid string length`。
+- `node:sqlite` 改为惰性加载，常规 `help` 与非 SQLite 路径不再出现之前的 warning。
 
-## 技术栈
+## 包结构
 
-- [Node.js](https://nodejs.org/)
-- npm workspaces
-- Codex、Claude Code、Gemini CLI 的本地 session 存储
-- 用于 Codex thread 索引写入的 Node SQLite 支持
-
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
+- `@floatfu-true/anyfork-cli`
+  面向用户的主 CLI，负责 `fork` 工作流。
+- `@floatfu-true/anyfork-core`
+  底层 bridge 能力，负责本地 session 解析、桥接产物导出、原生 resume 数据写入。
+- `@floatfu-true/anyfork-mcp-server`
+  MCP 服务端，负责“查找相关 session 并导入到当前项目”。
 
 ## 快速开始
 
 ### 前置要求
 
 - `Node.js >= 22`
-- 本地已安装源端 CLI
-- 本地已安装目标端 CLI
+- 本地已安装源平台 CLI
+- 如果要获得原生 resume 体验，目标平台 CLI 也需要已安装
 
-### 安装
-
-安装 CLI 包：
+### 安装 CLI
 
 ```bash
 npm install -g @floatfu-true/anyfork-cli
@@ -101,38 +97,23 @@ npm install -g @floatfu-true/anyfork-cli
 anyfork --help
 ```
 
-大多数用户只需要 `@floatfu-true/anyfork-cli`。
+### 安装 MCP 服务端
 
-`@floatfu-true/anyfork-core` 是给 CLI 和高级集成使用的底层 bridge 库。
-
-### 本地开发
+全局安装：
 
 ```bash
-git clone https://github.com/FloatFu-true/Anyfork.git
-cd Anyfork
-npm install
-npm test
+npm install -g @floatfu-true/anyfork-mcp-server
 ```
 
-本地运行 CLI：
+或使用 `npx` 一次性启动：
 
 ```bash
-node packages/cli/src/index.js --help
-node packages/cli/src/index.js fork codex claude last --dry-run
+npx -y @floatfu-true/anyfork-mcp-server@latest
 ```
 
-发布前做 dry-run 打包检查：
+## CLI 用法
 
-```bash
-npm run pack:core
-npm run pack:cli
-```
-
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
-
-## 使用方式
-
-如果不带子命令，AnyFork 会显示主帮助信息。
+不带子命令时，AnyFork 会显示主帮助。
 
 ```text
 Usage: anyfork [OPTIONS]
@@ -156,15 +137,8 @@ anyfork fork codex claude last
 anyfork fork claude codex 20486cab-8ead-4410-b2d2-8bb6e66ae804
 anyfork fork gemini claude 3c5c4e92-b356-483b-ab96-7d14321e7f0c
 anyfork fork codex gemini last --prompt "Continue implementation"
+anyfork fork codex claude last --dry-run
 ```
-
-一次 fork 的内部流程：
-
-1. 从本地 CLI 存储里定位源 session
-2. 规范化并去重可见 transcript
-3. 导出 bridge bundle 和可阅读的 handoff 文档
-4. 在目标端格式已知时写入目标原生会话数据
-5. 如果未使用 `--dry-run`，则通过目标 CLI 自己的 resume 路径启动
 
 桥接产物默认写到：
 
@@ -189,7 +163,98 @@ anyfork fork codex gemini last --prompt "Continue implementation"
 - `gemini -> codex`
 - `gemini -> claude`
 
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
+## MCP 用法
+
+### MCP 的意义
+
+MCP 包主要解决“模型自己找 session、自己导入”的工作流：
+
+- 根据用户需求查找本地 session
+- 按 transcript 和项目路径匹配度排序
+- 把命中的 session 导入当前项目
+- 在目标平台支持时，写入可原生 resume 的本地数据
+
+### 暴露出的 MCP 工具
+
+- `anyfork_list_sessions`
+  枚举 Codex、Claude、Gemini 的本地 session。
+- `anyfork_find_relevant_sessions`
+  按任务、Bug、需求描述搜索相关 session。
+- `anyfork_import_session`
+  把已知 session 导入到当前项目的目标平台。
+- `anyfork_find_and_import`
+  先搜索，再自动导入最匹配的一条。
+
+### 推荐调用顺序
+
+1. 先调用 `anyfork_find_relevant_sessions`，传入用户需求和当前 `cwd`。
+2. 检查候选列表和分数是否合理。
+3. 如果 session id 已知，就调用 `anyfork_import_session`。
+4. 如果 session id 未知，就直接调用 `anyfork_find_and_import`。
+5. 导入完成后，在目标 CLI 中走原生 resume 流程继续工作。
+
+### 接入 Codex
+
+下面命令已按本机 `codex mcp --help` 语法核对：
+
+```bash
+codex mcp add anyfork -- anyfork-mcp-server
+```
+
+或直接用 `npx`：
+
+```bash
+codex mcp add anyfork -- npx -y @floatfu-true/anyfork-mcp-server@latest
+```
+
+### 接入 Claude Code
+
+下面命令已按本机 `claude mcp --help` 语法核对：
+
+```bash
+claude mcp add anyfork -- anyfork-mcp-server
+```
+
+或直接用 `npx`：
+
+```bash
+claude mcp add anyfork -- npx -y @floatfu-true/anyfork-mcp-server@latest
+```
+
+### 接入 Gemini CLI
+
+下面命令已按本机 `gemini mcp --help` 语法核对：
+
+```bash
+gemini mcp add anyfork anyfork-mcp-server
+```
+
+或直接用 `npx`：
+
+```bash
+gemini mcp add anyfork npx -y @floatfu-true/anyfork-mcp-server@latest
+```
+
+### MCP 调用示例
+
+模型想完成的目标可以写成：
+
+```text
+查找 AnyFork 开发过程中和 MCP 集成 Bug 相关的 session，并把它导入当前项目，目标平台使用 codex。
+```
+
+对应的典型参数：
+
+```json
+{
+  "query": "AnyFork MCP integration bug and resume verification",
+  "to": "codex",
+  "cwd": "/absolute/path/to/current/project",
+  "onlyCurrentCwd": true,
+  "limit": 5,
+  "dryRun": false
+}
+```
 
 ## 演示
 
@@ -197,7 +262,7 @@ anyfork fork codex gemini last --prompt "Continue implementation"
 
 - [观看宣传视频](./assets/demo/anyfork-promo-30s.mp4)
 
-### 实际 resume 效果图
+### 原生 resume 效果截图
 
 #### Claude -> Gemini
 
@@ -211,54 +276,51 @@ anyfork fork codex gemini last --prompt "Continue implementation"
 
 ![Gemini 到 Claude 的 resume 演示](./assets/screenshots/gemini-to-claude-resume.svg)
 
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
+## 本地开发
+
+```bash
+git clone https://github.com/FloatFu-true/Anyfork.git
+cd Anyfork
+npm install
+npm test
+```
+
+本地运行：
+
+```bash
+node packages/cli/src/index.js --help
+node packages/cli/src/index.js fork codex claude last --dry-run
+node packages/mcp/src/index.js
+```
+
+发包前打包检查：
+
+```bash
+npm run pack:core
+npm run pack:cli
+npm run pack:mcp
+```
 
 ## 路线图
 
-- [x] 六个跨 CLI 方向的 session bridge
+- [x] 六个方向的跨 CLI session bridge
 - [x] Codex、Claude、Gemini 的原生 resume 数据写入
-- [x] 以 `fork` 为中心的极简公开 CLI 面
-- [x] 中英文双语项目文档
-- [ ] 增强厂商 schema 变更时的诊断信息
-- [ ] 增加 resume 对齐验证工具
+- [x] MCP 搜索与导入服务
+- [x] 中英文双语文档
+- [ ] 增强厂商 schema 变化时的诊断信息
+- [ ] 增加更细的 resume 对齐校验工具
 - [ ] 补充贡献与发布流程文档
-
-更多变更建议和问题，见 [Issues](https://github.com/FloatFu-true/Anyfork/issues)。
-
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
 ## 参与贡献
 
-开源项目的价值来自真实协作。如果你有能让 AnyFork 更好的想法，欢迎先提 issue，也欢迎直接发起 PR。
+欢迎贡献，但建议继续保持 AnyFork 的边界清晰，聚焦“本地 session continuity”而不是无边界扩张。
 
 1. Fork 本项目
-2. 创建功能分支：`git checkout -b feature/amazing-feature`
-3. 提交改动：`git commit -m "feat: add amazing feature"`
+2. 创建分支：`git checkout -b feature/amazing-feature`
+3. 提交修改：`git commit -m "feat: add amazing feature"`
 4. 推送分支：`git push origin feature/amazing-feature`
 5. 发起 Pull Request
 
-也欢迎帮忙一起守住 AnyFork 的产品边界，让公开命令面继续保持专注，不轻易膨胀。
-
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
-
 ## 许可证
 
-本项目基于 MIT License 发布。详情见 [LICENSE](./LICENSE)。
-
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
-
-## 联系
-
-- GitHub 组织：[@FloatFu-true](https://github.com/FloatFu-true)
-- 项目仓库：[https://github.com/FloatFu-true/Anyfork](https://github.com/FloatFu-true/Anyfork)
-- npm 包：[@floatfu-true/anyfork-cli](https://www.npmjs.com/package/@floatfu-true/anyfork-cli)
-
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
-
-## 鸣谢
-
-- [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template)，README 结构灵感来源
-- [Choose an Open Source License](https://choosealicense.com/)
-- [Shields.io](https://shields.io/)
-
-<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
+本项目基于 MIT License 发布。详见 [LICENSE](./LICENSE)。

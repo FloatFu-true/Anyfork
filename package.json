@@ -1,6 +1,6 @@
 {
   "name": "anyfork-workspace",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -12,7 +12,8 @@
     "test": "node --test tests/*.test.js",
     "start": "node packages/cli/src/index.js help",
     "pack:core": "npm pack --dry-run -w @floatfu-true/anyfork-core",
-    "pack:cli": "npm pack --dry-run -w @floatfu-true/anyfork-cli"
+    "pack:cli": "npm pack --dry-run -w @floatfu-true/anyfork-cli",
+    "pack:mcp": "npm pack --dry-run -w @floatfu-true/anyfork-mcp-server"
   },
   "engines": {
     "node": ">=22"

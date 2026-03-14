@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
 
 import {
   agentBridgeExportCommand,
@@ -15,6 +14,18 @@ import {
   codexSessionsCommand
 } from "../packages/core/src/index.js";
 import { runCli } from "../packages/cli/src/index.js";
+
+let cachedDatabaseSync = null;
+
+async function getDatabaseSync() {
+  if (cachedDatabaseSync) {
+    return cachedDatabaseSync;
+  }
+
+  const sqliteModule = await import("node:sqlite");
+  cachedDatabaseSync = sqliteModule.DatabaseSync;
+  return cachedDatabaseSync;
+}
 
 function normalizeGeminiRegistryPath(targetPath) {
   const resolved = path.resolve(targetPath);
@@ -371,6 +382,7 @@ async function writeGeminiProjectRegistry(geminiHome, mapping) {
 async function writeCodexStateDb({ codexHome, rows = [] }) {
   const dbPath = path.join(codexHome, "state_5.sqlite");
   await fs.mkdir(path.dirname(dbPath), { recursive: true });
+  const DatabaseSync = await getDatabaseSync();
   const db = new DatabaseSync(dbPath);
 
   try {
@@ -865,6 +877,83 @@ test("agent bridge export includes the full deduped transcript by default", asyn
   assert.equal(bundle.messages[119].content, "message-120");
 });
 
+test("agent bridge export applies a char budget and trims handoff previews", async (t) => {
+  const runtimeRoot = await createRuntimeRoot(t);
+  const codexHome = path.join(runtimeRoot, "codex-home");
+  const launchCwd = path.join(runtimeRoot, "workspace");
+  const sessionId = "budgeted-export-6666-6666-6666-666666666666";
+  await fs.mkdir(launchCwd, { recursive: true });
+
+  const oversizedText = "x".repeat(6_000);
+  const messages = Array.from({ length: 6 }, (_, index) => ({
+    role: index % 2 === 0 ? "user" : "assistant",
+    content: `${index + 1}:${oversizedText}`
+  }));
+
+  await writeCodexRolloutWithTranscript({
+    codexHome,
+    relativePath: path.join("2026", "03", "11"),
+    sessionId,
+    cwd: launchCwd,
+    messages
+  });
+
+  const result = await agentBridgeExportCommand({
+    from: "codex",
+    id: sessionId,
+    "codex-home": codexHome,
+    "max-bundle-chars": "15000"
+  });
+
+  const bundle = JSON.parse(await fs.readFile(result.bundlePath, "utf8"));
+  const handoff = await fs.readFile(result.handoffPath, "utf8");
+
+  assert.equal(bundle.stats.truncated, true);
+  assert.ok(bundle.stats.truncationReasons.includes("max-bundle-chars"));
+  assert.ok(bundle.messages.length < messages.length);
+  assert.ok(!Array.isArray(bundle.conversation.messages));
+  assert.match(handoff, /Latest user intent truncated/);
+  assert.match(handoff, /Working goal truncated/);
+  assert.ok(handoff.length < 40_000);
+});
+
+test("agent bridge fork dry-run exports artifacts without seeding target-native sessions", async (t) => {
+  const runtimeRoot = await createRuntimeRoot(t);
+  const codexHome = path.join(runtimeRoot, "codex-home");
+  const claudeHome = path.join(runtimeRoot, "claude-home");
+  const launchCwd = path.join(runtimeRoot, "workspace");
+  const sessionId = "dry-run-7777-7777-7777-777777777777";
+  await fs.mkdir(launchCwd, { recursive: true });
+
+  await writeCodexRollout({
+    codexHome,
+    relativePath: path.join("2026", "03", "11"),
+    sessionId,
+    cwd: launchCwd,
+    userText: "dry run user",
+    assistantText: "dry run assistant",
+    nativeLike: true
+  });
+
+  const result = await agentBridgeForkCommand({
+    from: "codex",
+    to: "claude",
+    id: sessionId,
+    cwd: launchCwd,
+    "codex-home": codexHome,
+    "claude-home": claudeHome,
+    "dry-run": "true"
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.dryRun, true);
+  assert.equal(result.seededSession, null);
+  assert.equal(result.command, null);
+  assert.deepEqual(result.args, []);
+  assert.match(result.note, /No target-native session was seeded/);
+  await assert.rejects(() => fs.stat(path.join(claudeHome, "projects")), /ENOENT/);
+});
+
 test("agent bridge fork seeds native resume sessions for every cross-platform direction", async (t) => {
   const runtimeRoot = await createRuntimeRoot(t);
   const codexHome = path.join(runtimeRoot, "codex-home");
@@ -936,8 +1025,10 @@ test("agent bridge fork seeds native resume sessions for every cross-platform di
       cwd: launchCwd,
       "codex-home": codexHome,
       "claude-home": claudeHome,
-      "gemini-home": geminiHome,
-      "dry-run": "true"
+      "gemini-home": geminiHome
+    }, {
+      cwd: launchCwd,
+      spawnCommand: async () => 0
     });
 
     assert.equal(result.ok, true, `${direction.from} -> ${direction.to}`);
@@ -1018,8 +1109,10 @@ test("codex bridge uses native metadata and updates sqlite thread index", async 
     id: sourceSessionId,
     cwd: launchCwd,
     "codex-home": codexHome,
-    "claude-home": claudeHome,
-    "dry-run": "true"
+    "claude-home": claudeHome
+  }, {
+    cwd: launchCwd,
+    spawnCommand: async () => 0
   });
 
   const records = (await fs.readFile(result.seededSession.sessionPath, "utf8"))
@@ -1034,6 +1127,7 @@ test("codex bridge uses native metadata and updates sqlite thread index", async 
   assert.equal(sessionMeta.cli_version, "0.112.0");
   assert.equal(sessionMeta.anyfork_imported, true);
 
+  const DatabaseSync = await getDatabaseSync();
   const db = new DatabaseSync(path.join(codexHome, "state_5.sqlite"));
   try {
     const thread = db
@@ -1082,8 +1176,10 @@ test("gemini seeding respects registered project slug when stale duplicate marke
     id: sourceSessionId,
     cwd: launchCwd,
     "codex-home": codexHome,
-    "gemini-home": geminiHome,
-    "dry-run": "true"
+    "gemini-home": geminiHome
+  }, {
+    cwd: launchCwd,
+    spawnCommand: async () => 0
   });
 
   assert.equal(result.ok, true);
@@ -1119,11 +1215,11 @@ test("agent bridge fork defaults target project cwd to invocation cwd instead of
       to: "claude",
       id: sourceSessionId,
       "codex-home": codexHome,
-      "claude-home": claudeHome,
-      "dry-run": "true"
+      "claude-home": claudeHome
     },
     {
-      cwd: invocationWorkspace
+      cwd: invocationWorkspace,
+      spawnCommand: async () => 0
     }
   );
 

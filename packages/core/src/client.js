@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 
 import { extractContent, extractRole } from "./conversation.js";
 import { ensureDir, listFilesRecursive, readJsonFile, readTextFile, statSafe, writeJsonFile, writeTextFile } from "./files.js";
@@ -59,6 +58,98 @@ function parseOptionalPositiveInt(value) {
 
   const numeric = Number.parseInt(value, 10);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+const DEFAULT_MAX_BUNDLE_CHARS = 2_000_000;
+const DEFAULT_MAX_HANDOFF_CHARS = 200_000;
+const DEFAULT_MAX_HANDOFF_MESSAGES = 200;
+const DEFAULT_MAX_HANDOFF_MESSAGE_CHARS = 8_000;
+const DEFAULT_MAX_SUMMARY_CHARS = 4_000;
+
+function truncateText(value, maxChars, suffix = "\n...[truncated]") {
+  const normalized = String(value ?? "");
+  if (!Number.isFinite(maxChars) || maxChars <= 0) {
+    return {
+      text: "",
+      truncated: normalized.length > 0
+    };
+  }
+
+  if (normalized.length <= maxChars) {
+    return {
+      text: normalized,
+      truncated: false
+    };
+  }
+
+  if (maxChars <= suffix.length) {
+    return {
+      text: suffix.slice(0, maxChars),
+      truncated: true
+    };
+  }
+
+  return {
+    text: `${normalized.slice(0, maxChars - suffix.length)}${suffix}`,
+    truncated: true
+  };
+}
+
+function estimateMessageChars(message) {
+  return (
+    String(message?.role ?? "").length +
+    String(message?.createdAt ?? "").length +
+    String(message?.content ?? "").length +
+    64
+  );
+}
+
+function selectMessagesWithinBudget(messages, maxChars) {
+  if (!Number.isFinite(maxChars) || maxChars <= 0) {
+    return {
+      messages: [...messages],
+      truncated: false
+    };
+  }
+
+  const kept = [];
+  let totalChars = 0;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const estimatedChars = estimateMessageChars(message);
+
+    if (kept.length > 0 && totalChars + estimatedChars > maxChars) {
+      break;
+    }
+
+    if (kept.length === 0 && estimatedChars > maxChars) {
+      const reservedChars =
+        String(message?.role ?? "").length +
+        String(message?.createdAt ?? "").length +
+        64;
+      const availableContentChars = Math.max(128, maxChars - reservedChars);
+      const truncatedContent = truncateText(message?.content ?? "", availableContentChars);
+      kept.push({
+        ...message,
+        content: truncatedContent.text
+      });
+      totalChars = maxChars;
+      return {
+        messages: kept.reverse(),
+        truncated: true
+      };
+    }
+
+    kept.push(message);
+    totalChars += estimatedChars;
+  }
+
+  const selected = kept.reverse();
+  return {
+    messages: selected,
+    truncated: selected.length < messages.length
+  };
 }
 
 function normalizeComparablePath(targetPath) {
@@ -215,6 +306,18 @@ function cloneJsonValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+let cachedDatabaseSync = null;
+
+async function getDatabaseSync() {
+  if (cachedDatabaseSync) {
+    return cachedDatabaseSync;
+  }
+
+  const sqliteModule = await import("node:sqlite");
+  cachedDatabaseSync = sqliteModule.DatabaseSync;
+  return cachedDatabaseSync;
+}
+
 export function getDocsPath(cwd = process.cwd()) {
   return path.resolve(cwd, "README.md");
 }
@@ -322,11 +425,12 @@ async function detectCodexSessionTemplate(codexHome) {
   return null;
 }
 
-function detectCodexThreadTemplate(codexHome, cwd) {
+async function detectCodexThreadTemplate(codexHome, cwd) {
   const dbPath = path.join(codexHome, "state_5.sqlite");
   const threadCwd = formatCodexThreadCwd(cwd);
 
   try {
+    const DatabaseSync = await getDatabaseSync();
     const db = new DatabaseSync(dbPath);
     try {
       const selectTemplate = (cwdValue) => {
@@ -380,6 +484,7 @@ async function upsertCodexThreadIndex({
 
   const epochSeconds = toUnixSeconds(importedAt);
   for (let attempt = 0; attempt < 5; attempt += 1) {
+    const DatabaseSync = await getDatabaseSync();
     const db = new DatabaseSync(dbPath);
     try {
       db.exec("PRAGMA busy_timeout = 2000");
@@ -624,7 +729,7 @@ async function seedCodexResumeSession({ bundle, cwd, options }) {
   const sessionId = createSessionId();
   const importedAt = new Date().toISOString();
   const template = await detectCodexSessionTemplate(codexHome);
-  const threadTemplate = detectCodexThreadTemplate(codexHome, cwd);
+  const threadTemplate = await detectCodexThreadTemplate(codexHome, cwd);
   const cliVersion = template?.cliVersion ?? threadTemplate?.cli_version ?? await detectCodexCliVersion(codexHome);
   const metaOriginator = template?.originator ?? "codex_cli_rs";
   const metaSource = template?.source ?? threadTemplate?.source ?? "cli";
@@ -1118,6 +1223,11 @@ function buildBridgePrompt({ from, to, handoffPath, bundlePath, extraPrompt }) {
 }
 
 function renderBridgeHandoff(bundle) {
+  const latestUserIntent = truncateText(bundle.latestUserMessage, DEFAULT_MAX_SUMMARY_CHARS);
+  const workingGoal = truncateText(bundle.userGoal, DEFAULT_MAX_SUMMARY_CHARS);
+  const transcriptSource = bundle.messages.slice(-DEFAULT_MAX_HANDOFF_MESSAGES);
+  let transcriptTruncated = transcriptSource.length < bundle.messages.length;
+  let remainingChars = DEFAULT_MAX_HANDOFF_CHARS;
   const lines = [
     "# Cross-Agent Handoff",
     "",
@@ -1125,7 +1235,8 @@ function renderBridgeHandoff(bundle) {
     `- Source session id: ${bundle.source.sessionId}`,
     `- Exported at: ${bundle.exportedAt}`,
     `- Included messages: ${bundle.stats.includedMessages}`,
-    `- Truncated: ${bundle.stats.truncated ? "yes" : "no"}`
+    `- Truncated: ${bundle.stats.truncated ? "yes" : "no"}`,
+    `- Transcript preview messages: ${transcriptSource.length}/${bundle.messages.length}`
   ];
 
   if (bundle.source.cwd) {
@@ -1133,20 +1244,61 @@ function renderBridgeHandoff(bundle) {
   }
 
   if (bundle.latestUserMessage) {
-    lines.push("", "## Latest User Intent", "", bundle.latestUserMessage);
+    lines.push("", "## Latest User Intent", "", latestUserIntent.text);
+    if (latestUserIntent.truncated) {
+      lines.push("", "_Latest user intent truncated for readability._");
+    }
   }
 
   if (bundle.userGoal) {
-    lines.push("", "## Working Goal", "", bundle.userGoal);
+    lines.push("", "## Working Goal", "", workingGoal.text);
+    if (workingGoal.truncated) {
+      lines.push("", "_Working goal truncated for readability._");
+    }
   }
 
   lines.push("", "## Transcript", "");
 
-  for (const message of bundle.messages) {
-    lines.push(`### ${message.role} @ ${message.createdAt}`);
+  for (const message of transcriptSource) {
+    const heading = `### ${message.role} @ ${message.createdAt}`;
+    const truncatedContent = truncateText(message.content || "(empty)", DEFAULT_MAX_HANDOFF_MESSAGE_CHARS);
+    const blockLines = [
+      heading,
+      "",
+      truncatedContent.text || "(empty)",
+      ""
+    ];
+    const blockText = blockLines.join("\n");
+
+    if (blockText.length > remainingChars) {
+      transcriptTruncated = true;
+      if (remainingChars <= heading.length + 8) {
+        break;
+      }
+
+      const allowedContentChars = Math.max(64, remainingChars - heading.length - 8);
+      const clippedContent = truncateText(message.content || "(empty)", allowedContentChars);
+      lines.push(heading);
+      lines.push("");
+      lines.push(clippedContent.text || "(empty)");
+      lines.push("");
+      transcriptTruncated = true;
+      break;
+    }
+
+    lines.push(heading);
     lines.push("");
-    lines.push(message.content || "(empty)");
+    lines.push(truncatedContent.text || "(empty)");
     lines.push("");
+    remainingChars -= blockText.length;
+
+    if (truncatedContent.truncated) {
+      transcriptTruncated = true;
+    }
+  }
+
+  if (transcriptTruncated) {
+    lines.push("_Transcript preview truncated. Use bundle.json for the exported message subset._");
   }
 
   return `${lines.join("\n")}\n`;
@@ -1171,8 +1323,19 @@ async function exportSessionBundleInternal(options = {}) {
 
   const maxMessages = parseOptionalPositiveInt(options["max-messages"] ?? options.maxMessages);
   const dedupedMessages = dedupeTranscriptMessages(conversation.messages);
-  const includedMessages = maxMessages ? dedupedMessages.slice(-maxMessages) : dedupedMessages;
-  const truncated = Boolean(maxMessages) && includedMessages.length < dedupedMessages.length;
+  const cappedByCount = maxMessages ? dedupedMessages.slice(-maxMessages) : dedupedMessages;
+  const bundleCharBudget =
+    parseOptionalPositiveInt(options["max-bundle-chars"] ?? options.maxBundleChars) ?? DEFAULT_MAX_BUNDLE_CHARS;
+  const budgetedSelection = selectMessagesWithinBudget(cappedByCount, bundleCharBudget);
+  const includedMessages = budgetedSelection.messages;
+  const truncationReasons = [];
+  if (Boolean(maxMessages) && cappedByCount.length < dedupedMessages.length) {
+    truncationReasons.push("max-messages");
+  }
+  if (budgetedSelection.truncated) {
+    truncationReasons.push("max-bundle-chars");
+  }
+  const truncated = truncationReasons.length > 0;
   const latestUserMessage = [...includedMessages].reverse().find((message) => message.role === "user")?.content ?? "";
   const latestAssistantMessage = [...includedMessages].reverse().find((message) => message.role === "assistant")?.content ?? "";
   const userGoal = options.prompt ?? latestUserMessage ?? "";
@@ -1201,13 +1364,25 @@ async function exportSessionBundleInternal(options = {}) {
     stats: {
       messageCount: conversation.messageCount,
       includedMessages: includedMessages.length,
-      truncated
+      truncated,
+      truncationReasons
     },
     latestUserMessage,
     latestAssistantMessage,
     userGoal,
     messages: includedMessages,
-    conversation
+    conversation: {
+      conversationId: conversation.conversationId,
+      platform: conversation.platform,
+      workspaceId: conversation.workspaceId,
+      title: conversation.title,
+      sourceRoot: conversation.sourceRoot,
+      originFiles: conversation.originFiles,
+      fingerprint: conversation.fingerprint,
+      messageCount: conversation.messageCount,
+      rawMetadata: conversation.rawMetadata,
+      exportedAt: conversation.exportedAt
+    }
   };
 
   await ensureDir(outputDir);
@@ -1795,6 +1970,25 @@ export async function agentBridgeForkCommand(options = {}, runtime = {}) {
     cwd: invocationCwd
   });
   const targetCwd = path.resolve(options.cwd ?? invocationCwd);
+
+  if (parseCliBool(options["dry-run"] ?? options.dryRun)) {
+    return {
+      ok: true,
+      dryRun: true,
+      from,
+      to,
+      command: null,
+      args: [],
+      launchCwd: invocationCwd,
+      targetCwd,
+      outputDir: exportPayload.outputDir,
+      bundlePath: exportPayload.bundlePath,
+      handoffPath: exportPayload.handoffPath,
+      seededSession: null,
+      note: "Dry run exported bridge artifacts only. No target-native session was seeded."
+    };
+  }
+
   let seededSession = null;
   let command = "";
   let args = [];
@@ -1825,23 +2019,6 @@ export async function agentBridgeForkCommand(options = {}, runtime = {}) {
     args = buildGeminiResumeArgs(options, seededSession.resumeHint);
   } else {
     throw new Error(`Unsupported bridge target: ${to}`);
-  }
-
-  if (parseCliBool(options["dry-run"] ?? options.dryRun)) {
-    return {
-      ok: true,
-      dryRun: true,
-      from,
-      to,
-      command,
-      args,
-      launchCwd: invocationCwd,
-      targetCwd,
-      outputDir: exportPayload.outputDir,
-      bundlePath: exportPayload.bundlePath,
-      handoffPath: exportPayload.handoffPath,
-      seededSession
-    };
   }
 
   const spawnCommand = runtime.spawnCommand ?? spawnCliCommand;

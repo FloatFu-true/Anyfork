@@ -1,0 +1,28 @@
+{
+  "name": "@floatfu-true/anyfork-mcp-server",
+  "version": "0.1.6",
+  "type": "module",
+  "private": false,
+  "description": "AnyFork MCP server for finding relevant local sessions and importing them into the current project.",
+  "license": "MIT",
+  "bin": {
+    "anyfork-mcp-server": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@floatfu-true/anyfork-core": "0.1.6",
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "zod": "^3.25.76"
+  },
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

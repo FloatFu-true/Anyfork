@@ -19,112 +19,99 @@
 
   <p align="center">
     <a href="https://www.npmjs.com/package/@floatfu-true/anyfork-cli"><img src="https://img.shields.io/npm/v/@floatfu-true/anyfork-cli?style=for-the-badge" alt="NPM Version"></a>
+    <a href="https://www.npmjs.com/package/@floatfu-true/anyfork-mcp-server"><img src="https://img.shields.io/npm/v/@floatfu-true/anyfork-mcp-server?style=for-the-badge" alt="MCP Version"></a>
     <a href="https://github.com/FloatFu-true/Anyfork/blob/main/LICENSE"><img src="https://img.shields.io/github/license/FloatFu-true/Anyfork?style=for-the-badge" alt="MIT License"></a>
     <a href="https://github.com/FloatFu-true/Anyfork/issues"><img src="https://img.shields.io/github/issues/FloatFu-true/Anyfork?style=for-the-badge" alt="Issues"></a>
-    <a href="https://www.npmjs.com/package/@floatfu-true/anyfork-cli"><img src="https://img.shields.io/node/v/@floatfu-true/anyfork-cli?style=for-the-badge" alt="Node 22+"></a>
   </p>
 </div>
 
 ## Table Of Contents
 
 - [About The Project](#about-the-project)
-- [Built With](#built-with)
+- [What Is New In 0.1.6](#what-is-new-in-016)
+- [Packages](#packages)
 - [Getting Started](#getting-started)
-- [Usage](#usage)
+- [CLI Usage](#cli-usage)
+- [MCP Usage](#mcp-usage)
 - [Demo](#demo)
+- [Development](#development)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
-- [Contact](#contact)
-- [Acknowledgments](#acknowledgments)
 
 ## About The Project
 
-AnyFork is an open-source CLI built for a very specific workflow:
+AnyFork is an open-source toolkit for one specific workflow:
 
-move a real local conversation from one AI coding CLI into another one, preserve the visible transcript, and seed a target-native resumable session whenever the destination format is understood.
+move a real local conversation from one AI coding CLI into another one, preserve the visible transcript, and seed a target-native resumable session when the destination format is known.
 
-This project exists because native fork usually stops at the product boundary. In practice, engineers often build deep context in one tool, then want to continue the exact same thread in another CLI without rewriting context by hand.
+AnyFork is intentionally local-first:
 
-AnyFork focuses on practical continuity:
+- preserve visible transcript order
+- export inspectable bridge artifacts under `.anyfork/`
+- seed native resume data for supported targets
+- keep the public interface small enough to stay reliable
 
-- preserve the visible transcript in order
-- generate inspectable bridge artifacts under `.anyfork/`
-- seed target-native local session data when supported
-- keep the public CLI surface intentionally small
+AnyFork is not trying to be:
 
-AnyFork does not try to be:
-
-- a cloud sync platform
-- a backend memory service
+- a cloud sync service
+- a hosted memory backend
 - a byte-for-byte clone of vendor-private hidden caches
-- a replacement for the native CLIs themselves
+- a replacement for Codex, Claude, or Gemini themselves
 
-The goal is continuity you can actually use in day-to-day engineering work.
+## What Is New In 0.1.6
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+- Added `@floatfu-true/anyfork-mcp-server` so models can search local sessions and import the right one into the current project by tool call.
+- Added four MCP tools:
+  `anyfork_list_sessions`, `anyfork_find_relevant_sessions`, `anyfork_import_session`, `anyfork_find_and_import`.
+- `--dry-run` no longer writes target-native local session data.
+- Added transcript budgeting and truncation for large bundles to avoid `Invalid string length`.
+- Switched `node:sqlite` to lazy loading so common CLI help and non-SQLite paths do not emit the previous warning.
 
-## Built With
+## Packages
 
-- [Node.js](https://nodejs.org/)
-- npm workspaces
-- native local session stores from Codex, Claude Code, and Gemini CLI
-- Node SQLite support for Codex thread indexing
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+- `@floatfu-true/anyfork-cli`
+  Main CLI for `fork` workflows.
+- `@floatfu-true/anyfork-core`
+  Core library for local session parsing, bridge artifacts, and native resume seeding.
+- `@floatfu-true/anyfork-mcp-server`
+  MCP server that lets models find relevant local sessions and import them into the current project.
 
 ## Getting Started
 
 ### Prerequisites
 
 - `Node.js >= 22`
-- the source CLI installed locally
-- the target CLI installed locally
+- source CLI installed locally
+- target CLI installed locally if you want native resume handoff
 
-### Installation
-
-Install the CLI package:
+### Install The CLI
 
 ```bash
 npm install -g @floatfu-true/anyfork-cli
 ```
 
-Verify the installation:
+Verify:
 
 ```bash
 anyfork --help
 ```
 
-Most users only need `@floatfu-true/anyfork-cli`.
+### Install The MCP Server
 
-`@floatfu-true/anyfork-core` is the lower-level library used by the CLI and by advanced integrations.
-
-### Local Development
+Global install:
 
 ```bash
-git clone https://github.com/FloatFu-true/Anyfork.git
-cd Anyfork
-npm install
-npm test
+npm install -g @floatfu-true/anyfork-mcp-server
 ```
 
-Run the CLI locally:
+One-off execution through `npx`:
 
 ```bash
-node packages/cli/src/index.js --help
-node packages/cli/src/index.js fork codex claude last --dry-run
+npx -y @floatfu-true/anyfork-mcp-server@latest
 ```
 
-Create dry-run tarballs before publishing:
-
-```bash
-npm run pack:core
-npm run pack:cli
-```
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Usage
+## CLI Usage
 
 If no subcommand is specified, AnyFork shows the main help.
 
@@ -150,15 +137,8 @@ anyfork fork codex claude last
 anyfork fork claude codex 20486cab-8ead-4410-b2d2-8bb6e66ae804
 anyfork fork gemini claude 3c5c4e92-b356-483b-ab96-7d14321e7f0c
 anyfork fork codex gemini last --prompt "Continue implementation"
+anyfork fork codex claude last --dry-run
 ```
-
-What happens during a fork:
-
-1. Resolve the source session from local CLI storage.
-2. Normalize and deduplicate the visible transcript.
-3. Export a portable bridge bundle and a readable handoff note.
-4. Seed target-native local session data when the target format is known.
-5. Launch the target CLI through its native resume path unless `--dry-run` is used.
 
 Bridge artifacts are written to:
 
@@ -174,7 +154,7 @@ Supported platforms:
 - `claude`
 - `gemini`
 
-Current bridge directions:
+Supported directions:
 
 - `codex -> claude`
 - `codex -> gemini`
@@ -183,15 +163,105 @@ Current bridge directions:
 - `gemini -> codex`
 - `gemini -> claude`
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+## MCP Usage
+
+### Why MCP Matters
+
+The MCP package is designed for agent-driven workflows:
+
+- find sessions related to the user request
+- rank the best candidates by transcript and project match
+- import the chosen session into the current project
+- keep the resulting context resumable in the target CLI when supported
+
+### Exposed MCP Tools
+
+- `anyfork_list_sessions`
+  List local sessions across Codex, Claude, and Gemini.
+- `anyfork_find_relevant_sessions`
+  Search sessions by task, bug, or feature description.
+- `anyfork_import_session`
+  Import a known session into a target platform for the current project.
+- `anyfork_find_and_import`
+  Search first, then import the best match in one call.
+
+### Recommended Tool Calling Pattern
+
+1. Call `anyfork_find_relevant_sessions` with the user request and current `cwd`.
+2. Inspect the top candidates and confirm the score looks correct.
+3. Call `anyfork_import_session` if the session id is known, or `anyfork_find_and_import` if you want one-step import.
+4. Resume in the destination CLI through its native workflow.
+
+### Add To Codex
+
+Verified against local CLI help:
+
+```bash
+codex mcp add anyfork -- anyfork-mcp-server
+```
+
+Or with `npx`:
+
+```bash
+codex mcp add anyfork -- npx -y @floatfu-true/anyfork-mcp-server@latest
+```
+
+### Add To Claude Code
+
+Verified against local CLI help:
+
+```bash
+claude mcp add anyfork -- anyfork-mcp-server
+```
+
+Or with `npx`:
+
+```bash
+claude mcp add anyfork -- npx -y @floatfu-true/anyfork-mcp-server@latest
+```
+
+### Add To Gemini CLI
+
+Verified against local CLI help:
+
+```bash
+gemini mcp add anyfork anyfork-mcp-server
+```
+
+Or with `npx`:
+
+```bash
+gemini mcp add anyfork npx -y @floatfu-true/anyfork-mcp-server@latest
+```
+
+### Example MCP Import Flow
+
+Example prompt a model can satisfy through the MCP tools:
+
+```text
+Find the AnyFork development session related to MCP integration bugs, then import it into the current project as a Codex-resumable session.
+```
+
+Typical structured import parameters:
+
+```json
+{
+  "query": "AnyFork MCP integration bug and resume verification",
+  "to": "codex",
+  "cwd": "/absolute/path/to/current/project",
+  "onlyCurrentCwd": true,
+  "limit": 5,
+  "dryRun": false
+}
+```
 
 ## Demo
 
-### 30-second promo video
+### 30-Second Promo Video
 
 - [Watch the promo video](./assets/demo/anyfork-promo-30s.mp4)
 
-### Real resume screenshots
+### Native Resume Screenshots
 
 #### Claude -> Gemini
 
@@ -205,54 +275,51 @@ Current bridge directions:
 
 ![Gemini to Claude resume demo](./assets/screenshots/gemini-to-claude-resume.svg)
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+## Development
+
+```bash
+git clone https://github.com/FloatFu-true/Anyfork.git
+cd Anyfork
+npm install
+npm test
+```
+
+Run locally:
+
+```bash
+node packages/cli/src/index.js --help
+node packages/cli/src/index.js fork codex claude last --dry-run
+node packages/mcp/src/index.js
+```
+
+Pack checks:
+
+```bash
+npm run pack:core
+npm run pack:cli
+npm run pack:mcp
+```
 
 ## Roadmap
 
 - [x] Cross-CLI session bridge for all six directions
 - [x] Native resume seeding for Codex, Claude, and Gemini
-- [x] Minimal public CLI surface centered on `fork`
-- [x] Bilingual project documentation
+- [x] MCP server for search and import workflows
+- [x] Bilingual documentation
 - [ ] Improve diagnostics for vendor-specific schema changes
 - [ ] Add richer import verification utilities for resume parity checks
 - [ ] Publish contribution and release workflow documents
 
-See the [open issues](https://github.com/FloatFu-true/Anyfork/issues) for proposed changes and bug reports.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
 ## Contributing
 
-Contributions are what make open source valuable. If you have an idea that improves AnyFork, feel free to open an issue first or send a pull request directly.
+Contributions are welcome. Please keep the public surface focused on practical session continuity instead of broad platform sprawl.
 
-1. Fork the Project
-2. Create your Feature Branch: `git checkout -b feature/amazing-feature`
-3. Commit your Changes: `git commit -m "feat: add amazing feature"`
-4. Push to the Branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-Please keep the public CLI surface focused and avoid introducing broad commands unless they clearly improve the fork workflow.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+1. Fork the project.
+2. Create a branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m "feat: add amazing feature"`
+4. Push the branch: `git push origin feature/amazing-feature`
+5. Open a pull request.
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](./LICENSE) for more information.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Contact
-
-- GitHub organization: [FloatFu-true](https://github.com/FloatFu-true)
-- Project repository: [https://github.com/FloatFu-true/Anyfork](https://github.com/FloatFu-true/Anyfork)
-- Package: [@floatfu-true/anyfork-cli](https://www.npmjs.com/package/@floatfu-true/anyfork-cli)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Acknowledgments
-
-- [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template) for the README structure inspiration
-- [Choose an Open Source License](https://choosealicense.com/)
-- [Shields.io](https://shields.io/)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+Distributed under the MIT License. See [LICENSE](./LICENSE).
