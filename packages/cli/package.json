@@ -1,6 +1,6 @@
 {
   "name": "@floatfu-true/anyfork-cli",
-  "version": "0.1.6",
+  "version": "0.1.8",
   "type": "module",
   "private": false,
   "description": "AnyFork CLI for cross-agent session export, bridge, and fork workflows.",

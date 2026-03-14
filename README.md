@@ -28,7 +28,7 @@
 ## Table Of Contents
 
 - [About The Project](#about-the-project)
-- [What Is New In 0.1.6](#what-is-new-in-016)
+- [What Is New In 0.1.8](#what-is-new-in-018)
 - [Packages](#packages)
 - [Getting Started](#getting-started)
 - [CLI Usage](#cli-usage)
@@ -59,14 +59,14 @@ AnyFork is not trying to be:
 - a byte-for-byte clone of vendor-private hidden caches
 - a replacement for Codex, Claude, or Gemini themselves
 
-## What Is New In 0.1.6
+## What Is New In 0.1.8
 
-- Added `@floatfu-true/anyfork-mcp-server` so models can search local sessions and import the right one into the current project by tool call.
-- Added four MCP tools:
+- Added `anyfork mcp install` to register the AnyFork MCP server into Codex, Claude, and Gemini without overwriting existing MCP entries.
+- The new installer checks whether `anyfork` is already present and only appends missing registrations.
+- Supports `--platforms`, `--npx`, `--name`, and `--command` so the MCP install flow can fit local or published setups.
+- Fixed `--npx` registration to target the published `@floatfu-true/anyfork-mcp-server@latest` package instead of assuming the CLI and MCP package versions always match.
+- Previous `0.1.6` MCP search and import features remain unchanged:
   `anyfork_list_sessions`, `anyfork_find_relevant_sessions`, `anyfork_import_session`, `anyfork_find_and_import`.
-- `--dry-run` no longer writes target-native local session data.
-- Added transcript budgeting and truncation for large bundles to avoid `Invalid string length`.
-- Switched `node:sqlite` to lazy loading so common CLI help and non-SQLite paths do not emit the previous warning.
 
 ## Packages
 
@@ -118,9 +118,11 @@ If no subcommand is specified, AnyFork shows the main help.
 ```text
 Usage: anyfork [OPTIONS]
        anyfork fork <FROM> <TO> <SESSION|last> [OPTIONS]
+       anyfork mcp install [OPTIONS]
 
 Commands:
   fork           Fork a source session from one CLI into another CLI
+  mcp            Install or inspect AnyFork MCP integration helpers
   help           Print this message or the help of the given subcommand(s)
 ```
 
@@ -138,6 +140,8 @@ anyfork fork claude codex 20486cab-8ead-4410-b2d2-8bb6e66ae804
 anyfork fork gemini claude 3c5c4e92-b356-483b-ab96-7d14321e7f0c
 anyfork fork codex gemini last --prompt "Continue implementation"
 anyfork fork codex claude last --dry-run
+anyfork mcp install
+anyfork mcp install --platforms codex,claude
 ```
 
 Bridge artifacts are written to:
@@ -191,6 +195,22 @@ The MCP package is designed for agent-driven workflows:
 2. Inspect the top candidates and confirm the score looks correct.
 3. Call `anyfork_import_session` if the session id is known, or `anyfork_find_and_import` if you want one-step import.
 4. Resume in the destination CLI through its native workflow.
+
+### One-Command MCP Setup
+
+AnyFork can now register its MCP server into Codex, Claude, and Gemini without overwriting other existing MCP entries:
+
+```bash
+anyfork mcp install
+```
+
+Useful variants:
+
+```bash
+anyfork mcp install --platforms codex,claude
+anyfork mcp install --npx
+anyfork mcp install --command "node C:/tools/anyfork-mcp-server.js"
+```
 
 ### Add To Codex
 

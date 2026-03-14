@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 
 import {
   agentBridgeExportCommand,
@@ -61,6 +63,56 @@ async function captureStdout(fn) {
   } finally {
     process.stdout.write = originalWrite;
   }
+}
+
+function createSpawnMock(steps) {
+  const calls = [];
+
+  function spawnMock(command, args) {
+    calls.push({
+      command,
+      args: [...args]
+    });
+
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+
+    queueMicrotask(() => {
+      const step = steps.shift();
+      if (!step) {
+        child.stderr.write("unexpected spawn");
+        child.stderr.end();
+        child.stdout.end();
+        child.emit("close", 1);
+        return;
+      }
+
+      assert.equal(command, step.command);
+      assert.deepEqual(args, step.args);
+
+      if (step.stdout) {
+        child.stdout.write(step.stdout);
+      }
+
+      if (step.stderr) {
+        child.stderr.write(step.stderr);
+      }
+
+      child.stdout.end();
+      child.stderr.end();
+      child.emit("close", step.exitCode ?? 0);
+    });
+
+    return child;
+  }
+
+  spawnMock.calls = calls;
+  spawnMock.assertDone = () => {
+    assert.equal(steps.length, 0);
+  };
+
+  return spawnMock;
 }
 
 async function writeCodexRollout({
@@ -705,8 +757,10 @@ test("cli help only advertises the public fork surface", async () => {
 
   assert.match(stdout, /Usage: anyfork \[OPTIONS\]/);
   assert.match(stdout, /anyfork fork <FROM> <TO> <SESSION\|last> \[OPTIONS\]/);
+  assert.match(stdout, /anyfork mcp install \[OPTIONS\]/);
   assert.match(stdout, /\bfork\s+Fork a source session from one CLI into another CLI/);
-  assert.doesNotMatch(stdout, /\bplatforms\b/);
+  assert.match(stdout, /\bmcp\s+Install or inspect AnyFork MCP integration helpers/);
+  assert.doesNotMatch(stdout, /\bagent-sessions\b/);
 });
 
 test("cli rejects hidden commands that are no longer part of the public surface", async () => {
@@ -738,6 +792,97 @@ test("windows cli spawning uses shell mode for npm shim commands", async () => {
       value: originalPlatform
     });
   }
+});
+
+test("mcp install registers AnyFork server only when missing", async () => {
+  const spawnMock = createSpawnMock([
+    {
+      command: "codex",
+      args: ["mcp", "get", "anyfork"],
+      exitCode: 1,
+      stderr: "not found"
+    },
+    {
+      command: "codex",
+      args: ["mcp", "add", "anyfork", "--", "anyfork-mcp-server"]
+    },
+    {
+      command: "claude",
+      args: ["mcp", "get", "anyfork"],
+      exitCode: 0,
+      stdout: "name: anyfork"
+    },
+    {
+      command: "gemini",
+      args: ["mcp", "list"],
+      exitCode: 0,
+      stdout: "Configured MCP servers:\n\n✓ memory: cmd /c npx -y @modelcontextprotocol/server-memory\n"
+    },
+    {
+      command: "gemini",
+      args: ["mcp", "add", "anyfork", "anyfork-mcp-server"]
+    }
+  ]);
+
+  const result = await runCli(["node", "anyfork", "mcp", "install"], {
+    spawn: spawnMock
+  });
+
+  spawnMock.assertDone();
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.results, [
+    {
+      platform: "codex",
+      status: "installed",
+      command: "codex",
+      args: ["mcp", "add", "anyfork", "--", "anyfork-mcp-server"]
+    },
+    {
+      platform: "claude",
+      status: "skipped",
+      reason: "already_installed"
+    },
+    {
+      platform: "gemini",
+      status: "installed",
+      command: "gemini",
+      args: ["mcp", "add", "anyfork", "anyfork-mcp-server"]
+    }
+  ]);
+});
+
+test("mcp install supports npx mode and platform filtering", async () => {
+  const spawnMock = createSpawnMock([
+    {
+      command: "codex",
+      args: ["mcp", "get", "anyfork"],
+      exitCode: 1,
+      stderr: "not found"
+    },
+    {
+      command: "codex",
+      args: ["mcp", "add", "anyfork", "--", "npx", "-y", "@floatfu-true/anyfork-mcp-server@latest"]
+    }
+  ]);
+
+  const result = await runCli(
+    ["node", "anyfork", "mcp", "install", "--platforms", "codex", "--npx"],
+    {
+      spawn: spawnMock
+    }
+  );
+
+  spawnMock.assertDone();
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.serverCommand, ["npx", "-y", "@floatfu-true/anyfork-mcp-server@latest"]);
+  assert.deepEqual(result.results, [
+    {
+      platform: "codex",
+      status: "installed",
+      command: "codex",
+      args: ["mcp", "add", "anyfork", "--", "npx", "-y", "@floatfu-true/anyfork-mcp-server@latest"]
+    }
+  ]);
 });
 
 test("agent bridge export can write a portable bundle and handoff", async (t) => {

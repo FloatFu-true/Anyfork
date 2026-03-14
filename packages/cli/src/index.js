@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 
 import { agentBridgeForkCommand } from "@floatfu-true/anyfork-core";
 
-const CLI_VERSION = "0.1.6";
+const CLI_VERSION = "0.1.8";
 
 const COMMAND_ALIASES = {
   "bridge-fork": "fork",
@@ -17,6 +18,11 @@ const GLOBAL_OPTION_ALIASES = {
   "-s": "sandbox",
   "-a": "ask-for-approval"
 };
+
+const MCP_SUPPORTED_PLATFORMS = ["codex", "claude", "gemini"];
+const DEFAULT_MCP_SERVER_NAME = "anyfork";
+const DEFAULT_MCP_SERVER_COMMAND = "anyfork-mcp-server";
+const DEFAULT_MCP_NPX_PACKAGE = "@floatfu-true/anyfork-mcp-server@latest";
 
 function appendOption(options, key, value) {
   if (options[key] === undefined) {
@@ -89,9 +95,11 @@ Cross-platform session handoff and fork tooling for Codex, Claude, and Gemini.
 
 Usage: anyfork [OPTIONS]
        anyfork fork <FROM> <TO> <SESSION|last> [OPTIONS]
+       anyfork mcp install [OPTIONS]
 
 Commands:
   fork           Fork a source session from one CLI into another CLI
+  mcp            Install or inspect AnyFork MCP integration helpers
   help           Print this message or the help of the given subcommand(s)
 
 Arguments:
@@ -154,6 +162,8 @@ Examples:
   anyfork fork codex claude last
   anyfork fork codex claude 11111111-1111-1111-1111-111111111111
   anyfork fork claude gemini 22222222-2222-2222-2222-222222222222 --prompt "Continue implementation"
+  anyfork mcp install
+  anyfork mcp install --platforms codex,claude
 `;
 }
 
@@ -186,6 +196,26 @@ Options:
 `;
   }
 
+  if (target === "mcp") {
+    return `Usage: anyfork mcp install [OPTIONS]
+
+Install the AnyFork MCP server into Codex, Claude, and/or Gemini without overwriting existing MCP configuration.
+
+Options:
+      --platforms <LIST>      Comma-separated platforms: codex,claude,gemini (default: all)
+      --name <NAME>           MCP server name to register (default: anyfork)
+      --command <COMMAND>     Custom MCP server launch command (default: anyfork-mcp-server)
+      --npx                  Register via npx using the matching published version
+  -h, --help                 Print help
+
+Examples:
+  anyfork mcp install
+  anyfork mcp install --platforms codex,claude
+  anyfork mcp install --npx
+  anyfork mcp install --command "node C:/tools/anyfork-mcp-server.js"
+`;
+  }
+
   return buildMainHelpText();
 }
 
@@ -197,7 +227,202 @@ function printVersion() {
   printText(CLI_VERSION);
 }
 
-export async function runCli(argv = process.argv) {
+function parseBooleanOption(value) {
+  return value === true || value === "true";
+}
+
+function parseCsvOption(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function normalizeMcpPlatforms(value) {
+  const requested = parseCsvOption(value);
+  if (requested.length === 0) {
+    return [...MCP_SUPPORTED_PLATFORMS];
+  }
+
+  const invalid = requested.filter((item) => !MCP_SUPPORTED_PLATFORMS.includes(item));
+  if (invalid.length > 0) {
+    throw new Error(`Unsupported MCP platform(s): ${invalid.join(", ")}`);
+  }
+
+  return [...new Set(requested)];
+}
+
+function createSpawnInvocation(command, args, options = {}) {
+  return {
+    command,
+    args,
+    options: {
+      cwd: options.cwd ? options.cwd : process.cwd(),
+      stdio: options.stdio ?? "pipe",
+      shell: process.platform === "win32"
+    }
+  };
+}
+
+async function runSpawnedCommand(command, args, options = {}, runtime = {}) {
+  const invocation = createSpawnInvocation(command, args, options);
+  const spawnImpl = runtime.spawn ?? spawn;
+
+  return new Promise((resolve) => {
+    const child = spawnImpl(invocation.command, invocation.args, invocation.options);
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      resolve({
+        ok: false,
+        exitCode: null,
+        stdout,
+        stderr: stderr || String(error?.message ?? error)
+      });
+    });
+
+    child.on("close", (exitCode) => {
+      resolve({
+        ok: exitCode === 0,
+        exitCode,
+        stdout,
+        stderr
+      });
+    });
+  });
+}
+
+function buildMcpCommandParts(options = {}) {
+  if (parseBooleanOption(options.npx)) {
+    return ["npx", "-y", DEFAULT_MCP_NPX_PACKAGE];
+  }
+
+  const customCommand = String(options.command ?? "").trim();
+  if (customCommand) {
+    const parts = [];
+    const matcher = /"([^"]*)"|[^\s]+/g;
+    let match = matcher.exec(customCommand);
+    while (match) {
+      parts.push(match[1] ?? match[0]);
+      match = matcher.exec(customCommand);
+    }
+    return parts.filter(Boolean);
+  }
+
+  return [DEFAULT_MCP_SERVER_COMMAND];
+}
+
+async function isMcpServerInstalled(platform, serverName, runtime = {}) {
+  if (platform === "codex") {
+    const result = await runSpawnedCommand("codex", ["mcp", "get", serverName], {}, runtime);
+    return result.ok;
+  }
+
+  if (platform === "claude") {
+    const result = await runSpawnedCommand("claude", ["mcp", "get", serverName], {}, runtime);
+    return result.ok;
+  }
+
+  if (platform === "gemini") {
+    const result = await runSpawnedCommand("gemini", ["mcp", "list"], {}, runtime);
+    if (!result.ok) {
+      return false;
+    }
+
+    const matcher = new RegExp(`(^|\\s)${serverName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|:|$)`, "im");
+    return matcher.test(result.stdout);
+  }
+
+  throw new Error(`Unsupported MCP platform: ${platform}`);
+}
+
+function buildMcpInstallInvocation(platform, serverName, commandParts) {
+  if (commandParts.length === 0) {
+    throw new Error("Missing MCP server command.");
+  }
+
+  if (platform === "codex") {
+    return {
+      command: "codex",
+      args: ["mcp", "add", serverName, "--", ...commandParts]
+    };
+  }
+
+  if (platform === "claude") {
+    return {
+      command: "claude",
+      args: ["mcp", "add", serverName, "--", ...commandParts]
+    };
+  }
+
+  if (platform === "gemini") {
+    return {
+      command: "gemini",
+      args: ["mcp", "add", serverName, ...commandParts]
+    };
+  }
+
+  throw new Error(`Unsupported MCP platform: ${platform}`);
+}
+
+async function installMcpServers(options = {}, runtime = {}) {
+  const platforms = normalizeMcpPlatforms(options.platforms);
+  const serverName = String(options.name ?? DEFAULT_MCP_SERVER_NAME).trim() || DEFAULT_MCP_SERVER_NAME;
+  const commandParts = buildMcpCommandParts(options);
+  const results = [];
+
+  for (const platform of platforms) {
+    const installed = await isMcpServerInstalled(platform, serverName, runtime);
+    if (installed) {
+      results.push({
+        platform,
+        status: "skipped",
+        reason: "already_installed"
+      });
+      continue;
+    }
+
+    const invocation = buildMcpInstallInvocation(platform, serverName, commandParts);
+    const installResult = await runSpawnedCommand(invocation.command, invocation.args, {}, runtime);
+
+    if (!installResult.ok) {
+      results.push({
+        platform,
+        status: "failed",
+        command: invocation.command,
+        args: invocation.args,
+        stderr: installResult.stderr.trim(),
+        stdout: installResult.stdout.trim()
+      });
+      continue;
+    }
+
+    results.push({
+      platform,
+      status: "installed",
+      command: invocation.command,
+      args: invocation.args
+    });
+  }
+
+  return {
+    ok: results.every((item) => item.status !== "failed"),
+    serverName,
+    serverCommand: commandParts,
+    results
+  };
+}
+
+export async function runCli(argv = process.argv, runtime = {}) {
   const { command, rawCommand, args, options } = parseArgs(argv);
 
   if (options.version) {
@@ -241,6 +466,17 @@ export async function runCli(argv = process.argv) {
     }
 
     return agentBridgeForkCommand(forkOptions);
+  }
+
+  if (command === "mcp") {
+    const [subcommand] = args;
+
+    if (subcommand === "install") {
+      return installMcpServers(options, runtime);
+    }
+
+    printText(buildCommandHelpText("mcp"));
+    return { ok: true, silent: true };
   }
 
   throw new Error(`Unknown command: ${command}`);

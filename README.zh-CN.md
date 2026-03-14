@@ -28,7 +28,7 @@
 ## 目录
 
 - [项目简介](#项目简介)
-- [0.1.6 更新重点](#016-更新重点)
+- [0.1.8 更新重点](#018-更新重点)
 - [包结构](#包结构)
 - [快速开始](#快速开始)
 - [CLI 用法](#cli-用法)
@@ -59,14 +59,14 @@ AnyFork 不打算做这些事情：
 - 厂商私有隐藏缓存的逐字节克隆
 - Codex、Claude、Gemini 原生 CLI 的替代品
 
-## 0.1.6 更新重点
+## 0.1.8 更新重点
 
-- 新增 `@floatfu-true/anyfork-mcp-server`，模型现在可以直接通过 MCP 查找相关本地 session，并导入到当前项目。
-- 新增 4 个 MCP 工具：
+- 新增 `anyfork mcp install`，可以把 AnyFork MCP 服务追加注册到 Codex、Claude、Gemini，而不覆盖已有 MCP 配置。
+- 新命令会先检查 `anyfork` 是否已存在，只补齐缺失的平台配置，避免重复写入。
+- 支持 `--platforms`、`--npx`、`--name`、`--command`，既能走已发布 npm 包，也能走本地自定义命令。
+- 修复 `--npx` 路径，改为指向已发布的 `@floatfu-true/anyfork-mcp-server@latest`，不再假设 CLI 和 MCP 包版本必须同步。
+- `0.1.6` 中新增的 MCP 搜索与导入能力保持不变：
   `anyfork_list_sessions`、`anyfork_find_relevant_sessions`、`anyfork_import_session`、`anyfork_find_and_import`。
-- `--dry-run` 不再写入目标平台原生 session，避免误污染目标端数据。
-- 为超长 transcript 增加预算与截断逻辑，避免 `Invalid string length`。
-- `node:sqlite` 改为惰性加载，常规 `help` 与非 SQLite 路径不再出现之前的 warning。
 
 ## 包结构
 
@@ -118,9 +118,11 @@ npx -y @floatfu-true/anyfork-mcp-server@latest
 ```text
 Usage: anyfork [OPTIONS]
        anyfork fork <FROM> <TO> <SESSION|last> [OPTIONS]
+       anyfork mcp install [OPTIONS]
 
 Commands:
   fork           Fork a source session from one CLI into another CLI
+  mcp            Install or inspect AnyFork MCP integration helpers
   help           Print this message or the help of the given subcommand(s)
 ```
 
@@ -138,6 +140,8 @@ anyfork fork claude codex 20486cab-8ead-4410-b2d2-8bb6e66ae804
 anyfork fork gemini claude 3c5c4e92-b356-483b-ab96-7d14321e7f0c
 anyfork fork codex gemini last --prompt "Continue implementation"
 anyfork fork codex claude last --dry-run
+anyfork mcp install
+anyfork mcp install --platforms codex,claude
 ```
 
 桥接产物默认写到：
@@ -192,6 +196,22 @@ MCP 包主要解决“模型自己找 session、自己导入”的工作流：
 3. 如果 session id 已知，就调用 `anyfork_import_session`。
 4. 如果 session id 未知，就直接调用 `anyfork_find_and_import`。
 5. 导入完成后，在目标 CLI 中走原生 resume 流程继续工作。
+
+### 一键安装 MCP
+
+现在可以直接通过 AnyFork 把 MCP 服务追加注册到 Codex、Claude、Gemini，且不会覆盖原有其它 MCP 配置：
+
+```bash
+anyfork mcp install
+```
+
+常见变体：
+
+```bash
+anyfork mcp install --platforms codex,claude
+anyfork mcp install --npx
+anyfork mcp install --command "node C:/tools/anyfork-mcp-server.js"
+```
 
 ### 接入 Codex
 
